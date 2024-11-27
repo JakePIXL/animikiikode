@@ -1,0 +1,28 @@
+async func async_example() {
+    // Channel creation
+    let (send, recv) = channel();
+
+    // Async operation
+    async func process_data() {
+        let data = await fetch_data();
+        send.push(data);
+    }
+
+    // Actor pattern
+    #actor
+    struct DataProcessor {
+        cache: HashMap<string, i32>
+    }
+
+    impl DataProcessor {
+        func handle(msg: Message) {
+            // Process incoming message
+            let result = process(msg);
+            send.push(result);
+        }
+    }
+
+    // Wait for result
+    let result = await recv.next();
+    println(result);
+}

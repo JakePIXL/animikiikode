@@ -1,0 +1,16 @@
+func ownership_example() {
+    // Unique ownership
+    let data: ~String = ~"Unique ownership";
+
+    // Shared ownership
+    let shared: @Vec<i32> = @[1, 2, 3];
+
+    // Thread-safe counter
+    #sync
+    struct Counter {
+        value: i32
+    }
+
+    let counter = Counter { value: 0 };
+    counter.with(|c| c.value += 1);
+}
