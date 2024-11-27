@@ -2,7 +2,8 @@ use interpreter::Value;
 use lexer::Token;
 use log::{error, info};
 use std::fs;
-use std::io::{self, BufRead, Write};
+use std::io::{self, Write};
+use std::process::Command;
 
 mod interpreter;
 mod lexer;
@@ -21,32 +22,21 @@ fn execute_file(path: &str) -> Result<(), String> {
 }
 
 fn execute_code(source: &str, interpreter: &mut Interpreter) -> Result<(), String> {
-    // Create lexer
     let mut lexer = Lexer::new(source.to_string());
     let mut tokens = Vec::new();
 
-    // const MAX_TOKENS: usize = 1000;
-
-    // Collect tokens
-    // while tokens.len() < MAX_TOKENS {
     loop {
         let token = lexer.next_token();
         match token {
-            Token::EOF => break,
+            Token::Eof => break,
             Token::Invalid(c) => return Err(format!("Invalid character: {}", c)),
             _ => tokens.push(token),
         }
     }
 
-    // if tokens.len() >= MAX_TOKENS {
-    //     return Err("Maximum token limit exceeded".to_string());
-    // }
-
-    // Parse tokens
     let mut parser = Parser::new(tokens);
     let ast = parser.parse()?;
 
-    // Interpret AST
     for node in ast {
         match interpreter.interpret(node) {
             Ok(value) => {
@@ -68,17 +58,14 @@ fn run_repl() -> io::Result<()> {
     let mut interpreter = Interpreter::new();
 
     loop {
-        print!("aki> ");
+        print!("aki > ");
         io::stdout().flush()?;
 
-        // Read input
         let mut input = String::new();
         match io::stdin().read_line(&mut input) {
             Ok(n) => {
-                // Check if we got any input
                 if n == 0 {
                     // EOF reached
-                    println!("\nGoodbye!");
                     break;
                 }
 
@@ -88,11 +75,10 @@ fn run_repl() -> io::Result<()> {
                 }
 
                 if trimmed == "exit" || trimmed == "quit" {
-                    println!("Goodbye!");
                     break;
                 }
 
-                println!("Processing input: {}", trimmed); // Debug print
+                info!("Processing input: {}", trimmed);
                 match execute_code(trimmed, &mut interpreter) {
                     Ok(_) => (),
                     Err(e) => eprintln!("Error: {}", e),
@@ -107,10 +93,36 @@ fn run_repl() -> io::Result<()> {
     Ok(())
 }
 
+pub fn clear_screen_native() -> io::Result<()> {
+    if cfg!(target_os = "windows") {
+        Command::new("cmd").args(["/C", "cls"]).status()?;
+    } else {
+        Command::new("clear").status()?;
+    }
+    io::stdout().flush()?;
+    Ok(())
+}
+
+pub fn clear_screen() {
+    match clear_screen_native() {
+        Ok(_) => {}
+        Err(_) => {
+            // Fallback to ANSI escape codes
+            print!("\x1B[2J\x1B[1;1H");
+            io::stdout().flush().unwrap();
+        }
+    }
+}
+
 fn main() {
     env_logger::init();
-    info!("Animikiikode interpreter starting...");
-    println!("Animikiikode v{}", env!("CARGO_PKG_VERSION"));
+
+    let version = env!("CARGO_PKG_VERSION");
+
+    info!("Animikiikode v{} interpreter starting...", version);
+
+    clear_screen();
+    println!("Animikiikode v{}", version);
 
     let args: Vec<String> = std::env::args().collect();
     match args.len() {
@@ -152,7 +164,7 @@ mod tests {
             func add(x: i32, y: i32) -> i32 {
                 x + y
             }
-            let result = add(5, 3);
+            add(5, 3);
         "#;
         let result = execute_code(code, &mut interpreter);
         assert!(result.is_ok());

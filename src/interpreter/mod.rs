@@ -1,4 +1,4 @@
-// src/interpreter/mod.rs
+#![allow(dead_code)]
 
 use crate::parser::{AstNode, Operator, Type, UnaryOperator};
 use crate::stdlib::StdLib;
@@ -123,6 +123,119 @@ impl Interpreter {
                 self.evaluate_binary_op(operator, left_val, right_val)
             }
 
+            AstNode::CompoundAssign {
+                operator,
+                target,
+                value,
+            } => match operator {
+                Operator::Assign => {
+                    if let AstNode::Identifier(name) = *target {
+                        let new_val = self.interpret(*value)?;
+                        self.environment.define(name, new_val.clone());
+                        Ok(new_val)
+                    } else {
+                        Err("Left side of = must be a variable".to_string())
+                    }
+                }
+                Operator::SelfAdd => {
+                    if let AstNode::Identifier(name) = *target {
+                        let curr_val = self
+                            .environment
+                            .get(&name)
+                            .ok_or(format!("Undefined variable: {}", name))?;
+                        let new_val = self.interpret(*value)?;
+                        let result =
+                            self.evaluate_binary_op(Operator::Add, curr_val.clone(), new_val)?;
+                        self.environment.define(name, result.clone());
+                        Ok(result)
+                    } else {
+                        Err("Left side of += must be a variable".to_string())
+                    }
+                }
+                Operator::Inc => {
+                    if let AstNode::Identifier(name) = *target {
+                        let curr_val = self
+                            .environment
+                            .get(&name)
+                            .ok_or(format!("Undefined variable: {}", name))?;
+                        let new_val = Value::Integer(1);
+                        let result =
+                            self.evaluate_binary_op(Operator::Add, curr_val.clone(), new_val)?;
+                        self.environment.define(name, result.clone());
+                        Ok(result)
+                    } else {
+                        Err("Left side of ++ must be a variable".to_string())
+                    }
+                }
+                Operator::SelfSub => {
+                    if let AstNode::Identifier(name) = *target {
+                        let curr_val = self
+                            .environment
+                            .get(&name)
+                            .ok_or(format!("Undefined variable: {}", name))?;
+                        let new_val = self.interpret(*value)?;
+                        let result =
+                            self.evaluate_binary_op(Operator::Sub, curr_val.clone(), new_val)?;
+                        self.environment.define(name, result.clone());
+                        Ok(result)
+                    } else {
+                        Err("Left side of -= must be a variable".to_string())
+                    }
+                }
+                Operator::Dec => {
+                    if let AstNode::Identifier(name) = *target {
+                        let curr_val = self
+                            .environment
+                            .get(&name)
+                            .ok_or(format!("Undefined variable: {}", name))?;
+                        let new_val = Value::Integer(1);
+                        let result =
+                            self.evaluate_binary_op(Operator::Sub, curr_val.clone(), new_val)?;
+                        self.environment.define(name, result.clone());
+                        Ok(result)
+                    } else {
+                        Err("Left side of -- must be a variable".to_string())
+                    }
+                }
+                _ => Err("Invalid compound assignment operator".to_string()),
+            },
+
+            AstNode::UnaryOp {
+                operator: UnaryOperator::Inc,
+                operand,
+            } => {
+                if let AstNode::Identifier(name) = *operand {
+                    let curr_val = self
+                        .environment
+                        .get(&name)
+                        .ok_or(format!("Undefined variable: {}", name))?;
+                    let one = Value::Integer(1);
+                    let result = self.evaluate_binary_op(Operator::Add, curr_val.clone(), one)?;
+                    self.environment.define(name, result.clone());
+                    Ok(result)
+                } else {
+                    Err("Operand of ++ must be a variable".to_string())
+                }
+            }
+
+            AstNode::UnaryOp {
+                operator: UnaryOperator::Dec,
+                operand,
+            } => {
+                if let AstNode::Identifier(name) = *operand {
+                    let curr_val = self
+                        .environment
+                        .get(&name)
+                        .ok_or(format!("Undefined variable: {}", name))?;
+                    let one = Value::Integer(1);
+                    let result = self.evaluate_binary_op(Operator::Sub, curr_val.clone(), one)?;
+                    self.environment.define(name, result.clone());
+                    Ok(result)
+                } else {
+                    Err("Operand of -- must be a variable".to_string())
+                }
+            }
+
             AstNode::UnaryOp { operator, operand } => {
                 let val = self.interpret(*operand)?;
                 self.evaluate_unary_op(operator, val)
@@ -216,7 +329,7 @@ impl Interpreter {
             }
 
             // Handle unique ownership (~)
-            AstNode::Ownership(ownership) => {
+            AstNode::Ownership(_ownership) => {
                 // Implementation for ownership handling
                 Ok(Value::Unit)
             }
@@ -286,10 +399,22 @@ impl Interpreter {
                     Ok(Value::Integer(a / b))
                 }
             }
+            (Operator::Mod, Value::Integer(a), Value::Integer(b)) => {
+                if b == 0 {
+                    Err("Modulus by zero".to_string())
+                } else {
+                    Ok(Value::Integer(a % b))
+                }
+            }
             (Operator::Eq, Value::Integer(a), Value::Integer(b)) => Ok(Value::Boolean(a == b)),
             (Operator::NotEq, Value::Integer(a), Value::Integer(b)) => Ok(Value::Boolean(a != b)),
-            // Add more cases for other types and operators
-            _ => Err(format!("Invalid operator for types")),
+            (Operator::Lt, Value::Integer(a), Value::Integer(b)) => Ok(Value::Boolean(a < b)),
+            (Operator::Gt, Value::Integer(a), Value::Integer(b)) => Ok(Value::Boolean(a > b)),
+            (Operator::LtEq, Value::Integer(a), Value::Integer(b)) => Ok(Value::Boolean(a <= b)),
+            (Operator::GtEq, Value::Integer(a), Value::Integer(b)) => Ok(Value::Boolean(a >= b)),
+            (Operator::And, Value::Boolean(a), Value::Boolean(b)) => Ok(Value::Boolean(a && b)),
+            (Operator::Or, Value::Boolean(a), Value::Boolean(b)) => Ok(Value::Boolean(a || b)),
+            _ => Err("Invalid operator for types".to_string()),
         }
     }
 
@@ -301,7 +426,7 @@ impl Interpreter {
         match (operator, operand) {
             (UnaryOperator::Neg, Value::Integer(n)) => Ok(Value::Integer(-n)),
             (UnaryOperator::Not, Value::Boolean(b)) => Ok(Value::Boolean(!b)),
-            _ => Err(format!("Invalid unary operator for type")),
+            _ => Err("Invalid unary operator for type".to_string()),
         }
     }
 }
