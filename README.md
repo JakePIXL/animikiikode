@@ -23,7 +23,7 @@ Animikiikode is designed as a proof-of-concept interpreted language that runs in
 ```rust
 // Example Animikiikode program
 func main() {
-    let dyn message = "Hello, Animikiikode!";
+    let message: dyn = "Hello, Animikiikode!";
     println(message);
 }
 ```
