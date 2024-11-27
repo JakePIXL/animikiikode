@@ -1,6 +1,7 @@
 // src/interpreter/mod.rs
 
 use crate::parser::{AstNode, Operator, Type, UnaryOperator};
+use crate::stdlib::StdLib;
 use std::collections::HashMap;
 
 // Values that can exist during runtime
@@ -176,8 +177,42 @@ impl Interpreter {
                     body: body.clone(),
                     closure: self.environment.clone(),
                 };
-                self.environment.define(name, func_value.clone());
+                self.environment.define(name.clone(), func_value.clone());
+
+                if name == "main" {
+                    return self.call_user_function(vec![], body, vec![], self.environment.clone());
+                }
+
                 Ok(func_value)
+            }
+
+            AstNode::FunctionCall { name, args } => {
+                // Evaluate all arguments first
+                let evaluated_args = args
+                    .into_iter()
+                    .map(|arg| self.interpret(arg))
+                    .collect::<Result<Vec<_>, _>>()?;
+
+                // Handle the function call
+                if let Some(func) = self.environment.get(&name) {
+                    match func {
+                        Value::Function {
+                            params,
+                            body,
+                            closure,
+                        } => {
+                            // Handle user-defined functions
+                            self.call_user_function(params, body, evaluated_args, closure)
+                        }
+                        _ => {
+                            // Handle built-in functions
+                            self.handle_builtin_function(&name, evaluated_args)
+                        }
+                    }
+                } else {
+                    // If not in environment, try as builtin
+                    self.handle_builtin_function(&name, evaluated_args)
+                }
             }
 
             // Handle unique ownership (~)
@@ -188,6 +223,50 @@ impl Interpreter {
 
             _ => Err(format!("Unimplemented node type: {:?}", node)),
         }
+    }
+
+    fn handle_builtin_function(&mut self, name: &str, args: Vec<Value>) -> Result<Value, String> {
+        match name {
+            "println" => StdLib::println(args),
+            "print" => StdLib::print(args),
+            "to_string" => StdLib::to_string(args),
+            "to_int" => StdLib::to_int(args),
+            "to_float" => StdLib::to_float(args),
+            "to_bool" => StdLib::to_bool(args),
+            _ => Err(format!("Unknown built-in function: {}", name)),
+        }
+    }
+
+    fn call_user_function(
+        &mut self,
+        params: Vec<(String, Type)>,
+        body: Box<AstNode>,
+        args: Vec<Value>,
+        closure: Environment,
+    ) -> Result<Value, String> {
+        // Verify argument count matches parameter count
+        if args.len() != params.len() {
+            return Err(format!(
+                "Function expected {} arguments but got {}",
+                params.len(),
+                args.len()
+            ));
+        }
+
+        // Create new environment with closure as parent
+        let mut func_env = Environment::with_parent(closure);
+
+        // Bind arguments to parameters
+        for ((name, _type), value) in params.into_iter().zip(args) {
+            func_env.define(name, value);
+        }
+
+        // Execute function body with new environment
+        let previous_env = std::mem::replace(&mut self.environment, func_env);
+        let result = self.interpret(*body);
+        self.environment = previous_env;
+
+        result
     }
 
     fn evaluate_binary_op(

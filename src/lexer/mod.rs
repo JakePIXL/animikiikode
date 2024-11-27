@@ -228,19 +228,6 @@ impl Lexer {
             "push" => Token::Push,
             "pop" => Token::Pop,
 
-            // IO
-            "print" => Token::Print,
-            "println" => Token::Println,
-            "input" => Token::Input,
-            "read_file" => Token::ReadFile,
-            "write_file" => Token::WriteFile,
-
-            // Type Conversion
-            "to_string" => Token::ToString,
-            "to_int" => Token::ToInt,
-            "to_float" => Token::ToFloat,
-            "to_bool" => Token::ToBool,
-
             // Collections
             "Vec" => Token::Vec,
             "HashMap" => Token::HashMap,

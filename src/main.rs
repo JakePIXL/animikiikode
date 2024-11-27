@@ -3,9 +3,11 @@ use lexer::Token;
 use log::{error, info};
 use std::fs;
 use std::io::{self, BufRead, Write};
+
 mod interpreter;
 mod lexer;
 mod parser;
+mod stdlib;
 
 use crate::interpreter::Interpreter;
 use crate::lexer::Lexer;
