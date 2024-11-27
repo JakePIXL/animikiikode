@@ -188,6 +188,13 @@ impl Parser {
             Some(Token::Func) => self.parse_function_declaration(),
             Some(Token::If) => self.parse_if_statement(),
             Some(Token::While) => self.parse_while_statement(),
+            Some(Token::Identifier(_)) => {
+                let expr = self.parse_expression()?;
+                if self.peek() == Some(&Token::Semicolon) {
+                    self.advance();
+                }
+                Ok(expr)
+            }
             _ => self.parse_expression(),
         }
     }
@@ -213,14 +220,32 @@ impl Parser {
             None
         };
 
-        self.expect(Token::Semicolon)?;
+        // self.expect(Token::Semicolon)?;
 
-        Ok(AstNode::VariableDecl {
-            name,
-            type_annotation,
-            initializer,
-            ownership: None, // Handle ownership later
-        })
+        // Ok(AstNode::VariableDecl {
+        //     name,
+        //     type_annotation,
+        //     initializer,
+        //     ownership: None, // Handle ownership later
+        // })
+
+        println!("Current token before semicolon check: {:?}", self.peek());
+
+        match self.peek() {
+            Some(Token::Semicolon) => {
+                self.advance(); // Consume semicolon
+                Ok(AstNode::VariableDecl {
+                    name,
+                    type_annotation,
+                    initializer,
+                    ownership: None,
+                })
+            }
+            other => Err(format!(
+                "Expected semicolon after variable declaration, got {:?}",
+                other
+            )),
+        }
     }
 
     fn parse_type(&mut self) -> Result<Type, String> {
@@ -605,10 +630,10 @@ impl Parser {
                     }
                     self.expect(Token::RParen)?;
 
-                    // Add semicolon handling
-                    if self.peek() == Some(&Token::Semicolon) {
-                        self.advance(); // Consume semicolon
-                    }
+                    // // Add semicolon handling
+                    // if self.peek() == Some(&Token::Semicolon) {
+                    //     self.advance(); // Consume semicolon
+                    // }
 
                     Ok(AstNode::FunctionCall {
                         name,

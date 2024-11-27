@@ -1,3 +1,5 @@
+use log::info;
+
 use crate::interpreter::Value;
 use std::io::{self, Write};
 
@@ -12,7 +14,23 @@ impl StdLib {
             "to_int",
             "to_float",
             "to_bool",
+            "read_file",
+            "write_file",
         ]
+    }
+
+    pub fn handle_builtin_function(name: &str, args: Vec<Value>) -> Result<Value, String> {
+        match name {
+            "println" => StdLib::println(args),
+            "print" => StdLib::print(args),
+            "to_string" => StdLib::to_string(args),
+            "to_int" => StdLib::to_int(args),
+            "to_float" => StdLib::to_float(args),
+            "to_bool" => StdLib::to_bool(args),
+            "read_file" => StdLib::read_file(args),
+            "write_file" => StdLib::write_file(args),
+            _ => Err(format!("Unknown built-in function: {}", name)),
+        }
     }
 
     pub fn is_builtin(name: &str) -> bool {
@@ -119,5 +137,42 @@ impl StdLib {
         };
 
         Ok(Value::Boolean(result))
+    }
+
+    pub fn read_file(args: Vec<Value>) -> Result<Value, String> {
+        if args.len() != 1 {
+            return Err("read_file expects exactly one argument".to_string());
+        }
+
+        let filename = match &args[0] {
+            Value::String(s) => s,
+            _ => return Err("read_file expects a string argument".to_string()),
+        };
+
+        info!("Reading from file: {}", filename);
+
+        let contents = std::fs::read_to_string(filename).map_err(|e| e.to_string())?;
+        Ok(Value::String(contents))
+    }
+
+    pub fn write_file(args: Vec<Value>) -> Result<Value, String> {
+        if args.len() != 2 {
+            return Err("write_file expects exactly two arguments".to_string());
+        }
+
+        let filename = match &args[0] {
+            Value::String(s) => s,
+            _ => return Err("write_file expects a string as the first argument".to_string()),
+        };
+
+        let contents = match &args[1] {
+            Value::String(s) => s,
+            _ => return Err("write_file expects a string as the second argument".to_string()),
+        };
+
+        info!("Writing to file: {}", filename);
+
+        std::fs::write(filename, contents).map_err(|e| e.to_string())?;
+        Ok(Value::Unit)
     }
 }

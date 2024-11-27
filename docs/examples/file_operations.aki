@@ -1,0 +1,11 @@
+func main() {
+    let path: string = "./docs/examples/fizzbuzz.aki";
+
+    let file: string = read_file(path);
+
+    println(file);
+
+    let data: string = "Hello, World! \nI love this language!";
+
+    write_file("test.txt", data);
+}

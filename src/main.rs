@@ -41,7 +41,7 @@ fn execute_code(source: &str, interpreter: &mut Interpreter) -> Result<(), Strin
         match interpreter.interpret(node) {
             Ok(value) => {
                 if !matches!(value, Value::Unit) {
-                    println!("=> {:?}", value);
+                    println!("====> {:?}", value);
                 }
             }
             Err(e) => {
@@ -58,7 +58,7 @@ fn run_repl() -> io::Result<()> {
     let mut interpreter = Interpreter::new();
 
     loop {
-        print!("aki > ");
+        print!("\naki > ");
         io::stdout().flush()?;
 
         let mut input = String::new();
