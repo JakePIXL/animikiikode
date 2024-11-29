@@ -62,6 +62,12 @@ pub enum AstNode {
         args: Vec<AstNode>,
     },
 
+    // Vector and HashMap access
+    IndexAccess {
+        target: Box<AstNode>,
+        index: Box<AstNode>,
+    },
+
     // Types and Ownership
     TypeAnnotation(Type),
     Ownership(Ownership),
@@ -199,6 +205,36 @@ impl Parser {
         }
     }
 
+    fn parse_collection_creation(&mut self) -> Result<AstNode, String> {
+        match self.peek() {
+            Some(Token::Vec) => {
+                self.advance(); // consume Vec
+                self.expect(Token::DoubleColon)?;
+                self.expect(Token::Identifier("new".to_string()))?;
+                self.expect(Token::LParen)?;
+                self.expect(Token::RParen)?;
+
+                Ok(AstNode::FunctionCall {
+                    name: "new_vector".to_string(),
+                    args: vec![],
+                })
+            }
+            Some(Token::HashMap) => {
+                self.advance(); // consume HashMap
+                self.expect(Token::DoubleColon)?;
+                self.expect(Token::Identifier("new".to_string()))?;
+                self.expect(Token::LParen)?;
+                self.expect(Token::RParen)?;
+
+                Ok(AstNode::FunctionCall {
+                    name: "new_hashmap".to_string(),
+                    args: vec![],
+                })
+            }
+            _ => Err("Expected collection type".to_string()),
+        }
+    }
+
     fn parse_variable_declaration(&mut self) -> Result<AstNode, String> {
         self.advance(); // consume 'let'
         let name = match self.advance() {
@@ -219,17 +255,6 @@ impl Parser {
         } else {
             None
         };
-
-        // self.expect(Token::Semicolon)?;
-
-        // Ok(AstNode::VariableDecl {
-        //     name,
-        //     type_annotation,
-        //     initializer,
-        //     ownership: None, // Handle ownership later
-        // })
-
-        println!("Current token before semicolon check: {:?}", self.peek());
 
         match self.peek() {
             Some(Token::Semicolon) => {
@@ -581,82 +606,101 @@ impl Parser {
     }
 
     fn parse_primary(&mut self) -> Result<AstNode, String> {
-        let current_token = match self.peek().cloned() {
-            Some(token) => token,
-            None => return Err("Unexpected end of input".to_string()),
-        };
+        // let current_token = match self.peek().cloned() {
+        //     Some(token) => token,
+        //     None => return Err("Unexpected end of input".to_string()),
+        // };
 
-        match current_token {
-            Token::Integer(_) => {
-                if let Some(Token::Integer(value)) = self.advance() {
-                    Ok(AstNode::Integer(value))
-                } else {
-                    Err("Expected integer".to_string())
-                }
-            }
-            Token::Float(_) => {
-                if let Some(Token::Float(value)) = self.advance() {
-                    Ok(AstNode::Float(value))
-                } else {
-                    Err("Expected float".to_string())
-                }
-            }
-            Token::String(_) => {
-                if let Some(Token::String(value)) = self.advance() {
-                    Ok(AstNode::String(value))
-                } else {
-                    Err("Expected string".to_string())
-                }
-            }
-            Token::Bool(_) => {
-                if let Some(Token::Bool(value)) = self.advance() {
-                    Ok(AstNode::Boolean(value))
-                } else {
-                    Err("Expected boolean".to_string())
-                }
-            }
-
-            Token::Identifier(name) => {
-                self.advance(); // consume identifier
-                if self.peek() == Some(&Token::LParen) || StdLib::is_builtin(&name) {
-                    // Handle function call for both user-defined and built-in functions
-                    self.advance(); // consume '('
-                    let mut arguments = Vec::new();
-                    while self.peek() != Some(&Token::RParen) {
-                        if !arguments.is_empty() {
-                            self.expect(Token::Comma)?;
-                        }
-                        arguments.push(self.parse_expression()?);
+        let mut expr = match self.peek().cloned() {
+            Some(current_token) => match current_token {
+                Token::Integer(_) => {
+                    if let Some(Token::Integer(value)) = self.advance() {
+                        Ok(AstNode::Integer(value))
+                    } else {
+                        Err("Expected integer".to_string())
                     }
-                    self.expect(Token::RParen)?;
-
-                    // // Add semicolon handling
-                    // if self.peek() == Some(&Token::Semicolon) {
-                    //     self.advance(); // Consume semicolon
-                    // }
-
-                    Ok(AstNode::FunctionCall {
-                        name,
-                        args: arguments,
-                    })
-                } else {
-                    Ok(AstNode::Identifier(name))
                 }
-            }
-            Token::LParen => {
-                self.advance(); // consume '('
-                let expr = self.parse_expression()?;
-                self.expect(Token::RParen)?;
-                Ok(expr)
-            }
-            token => {
-                self.advance();
-                Err(format!(
-                    "Unexpected token in primary expression: {:?}",
-                    token
-                ))
-            }
+                Token::Float(_) => {
+                    if let Some(Token::Float(value)) = self.advance() {
+                        Ok(AstNode::Float(value))
+                    } else {
+                        Err("Expected float".to_string())
+                    }
+                }
+                Token::String(_) => {
+                    if let Some(Token::String(value)) = self.advance() {
+                        Ok(AstNode::String(value))
+                    } else {
+                        Err("Expected string".to_string())
+                    }
+                }
+                Token::Bool(_) => {
+                    if let Some(Token::Bool(value)) = self.advance() {
+                        Ok(AstNode::Boolean(value))
+                    } else {
+                        Err("Expected boolean".to_string())
+                    }
+                }
+                Token::Vec | Token::HashMap => self.parse_collection_creation(),
+                Token::Identifier(name) => {
+                    self.advance(); // consume identifier
+                    if self.peek() == Some(&Token::LParen) || StdLib::is_builtin(&name) {
+                        // Handle function call for both user-defined and built-in functions
+                        self.advance(); // consume '('
+                        let mut arguments = Vec::new();
+                        while self.peek() != Some(&Token::RParen) {
+                            if !arguments.is_empty() {
+                                self.expect(Token::Comma)?;
+                            }
+                            arguments.push(self.parse_expression()?);
+                        }
+                        self.expect(Token::RParen)?;
+
+                        // Add semicolon handling
+                        // if self.peek() == Some(&Token::Semicolon) {
+                        //     self.advance(); // Consume semicolon
+                        // }
+
+                        Ok(AstNode::FunctionCall {
+                            name,
+                            args: arguments,
+                        })
+                    } else if self.peek() == Some(&Token::DoubleColon) {
+                        // Handle static method calls like Vec::new()
+                        self.parse_collection_creation()
+                    } else {
+                        Ok(AstNode::Identifier(name))
+                    }
+                }
+                Token::LParen => {
+                    self.advance(); // consume '('
+                    let expr = self.parse_expression()?;
+                    self.expect(Token::RParen)?;
+                    Ok(expr)
+                }
+                token => {
+                    self.advance();
+                    Err(format!(
+                        "Unexpected token in primary expression: {:?}",
+                        token
+                    ))
+                }
+            },
+            None => return Err("Unexpected end of input".to_string()),
+        }?;
+
+        while self.peek() == Some(&Token::LBracket) {
+            self.advance(); // consume '['
+            let index = self.parse_expression()?;
+            self.expect(Token::RBracket)?;
+
+            expr = AstNode::IndexAccess {
+                target: Box::new(expr),
+                index: Box::new(index),
+            };
         }
+
+        Ok(expr)
     }
 
     fn parse_block(&mut self) -> Result<AstNode, String> {

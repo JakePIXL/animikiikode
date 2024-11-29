@@ -55,6 +55,8 @@ fn execute_code(source: &str, interpreter: &mut Interpreter) -> Result<(), Strin
 }
 
 fn run_repl() -> io::Result<()> {
+    println!("Animikiikode REPL v{}", env!("CARGO_PKG_VERSION"));
+
     let mut interpreter = Interpreter::new();
 
     loop {
@@ -117,12 +119,12 @@ pub fn clear_screen() {
 fn main() {
     env_logger::init();
 
-    let version = env!("CARGO_PKG_VERSION");
-
-    info!("Animikiikode v{} interpreter starting...", version);
+    info!(
+        "Animikiikode v{} interpreter starting...",
+        env!("CARGO_PKG_VERSION")
+    );
 
     clear_screen();
-    println!("Animikiikode v{}", version);
 
     let args: Vec<String> = std::env::args().collect();
     match args.len() {

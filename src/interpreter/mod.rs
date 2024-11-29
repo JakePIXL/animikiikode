@@ -11,6 +11,8 @@ pub enum Value {
     Float(f64),
     String(String),
     Boolean(bool),
+    Vector(Vec<Value>),
+    HashMap(HashMap<String, Value>),
     Unit,             // For functions that don't return a value
     Reference(usize), // For heap allocated values
     Function {
@@ -106,6 +108,31 @@ impl Interpreter {
                 };
                 self.environment.define(name, value.clone());
                 Ok(value)
+            }
+
+            AstNode::IndexAccess { target, index } => {
+                let target_val = self.interpret(*target)?;
+                let index_val = self.interpret(*index)?;
+
+                match (target_val, index_val) {
+                    (Value::Vector(vec), Value::Integer(i)) => {
+                        if i < 0 || i as usize >= vec.len() {
+                            return Err("Index out of bounds".to_string());
+                        }
+                        Ok(vec[i as usize].clone())
+                    }
+                    (Value::HashMap(map), key) => {
+                        if let Value::String(key) = key {
+                            match map.get(&key) {
+                                Some(value) => Ok(value.clone()),
+                                None => Err(format!("Key not found: {}", key)),
+                            }
+                        } else {
+                            Err("Key must be a string".to_string())
+                        }
+                    }
+                    _ => Err("Invalid index access".to_string()),
+                }
             }
 
             AstNode::Identifier(name) => self
@@ -293,7 +320,12 @@ impl Interpreter {
                 self.environment.define(name.clone(), func_value.clone());
 
                 if name == "main" {
-                    return self.call_user_function(vec![], body, vec![], self.environment.clone());
+                    return self.call_user_function(
+                        vec![],
+                        *body,
+                        vec![],
+                        self.environment.clone(),
+                    );
                 }
 
                 Ok(func_value)
@@ -311,7 +343,7 @@ impl Interpreter {
                             params,
                             body,
                             closure,
-                        } => self.call_user_function(params, body, evaluated_args, closure),
+                        } => self.call_user_function(params, *body, evaluated_args, closure),
                         _ => StdLib::handle_builtin_function(&name, evaluated_args),
                     }
                 } else {
@@ -332,7 +364,7 @@ impl Interpreter {
     fn call_user_function(
         &mut self,
         params: Vec<(String, Type)>,
-        body: Box<AstNode>,
+        body: AstNode,
         args: Vec<Value>,
         closure: Environment,
     ) -> Result<Value, String> {
@@ -351,7 +383,7 @@ impl Interpreter {
         }
 
         let previous_env = std::mem::replace(&mut self.environment, func_env);
-        let result = self.interpret(*body);
+        let result = self.interpret(body);
         self.environment = previous_env;
 
         result

@@ -8,6 +8,15 @@ pub enum Token {
     String(String),
     Bool(bool),
 
+    // Collections
+    Channel,
+    Send,
+    Recv,
+    Push,
+    Pop,
+    Vec,
+    HashMap,
+
     // Keywords
     Let,
     Func,
@@ -52,70 +61,38 @@ pub enum Token {
     TypeVec,
     TypeHashMap,
 
-    // Operators
-    Plus,       // +
-    PlusPlus,   // ++
-    PlusEq,     // +=
-    Minus,      // -
-    MinusMinus, // --
-    MinusEq,    // -=
-    Multiply,   // *
-    Divide,     // /
-    Assign,     // =
-    Eq,         // ==
-    NotEq,      // !=
-    Lt,         //
-    Gt,         // >
-    LtEq,       // <=
-    GtEq,       // >=
-    And,        // &&
-    Or,         // ||
-    Not,        // !
-    Modulus,    // %
-
-    // Delimiters
-    LParen,      // (
-    RParen,      // )
-    LBrace,      // {
-    RBrace,      // }
-    LBracket,    // [
-    RBracket,    // ]
-    Comma,       // ,
-    Dot,         // .
-    Colon,       // :
-    DoubleColon, // ::
-    Semicolon,   // ;
-    Arrow,       // ->
-
-    // Concurrency
-    Channel, // channel keyword
-    Send,    // send keyword
-    Recv,    // recv keyword
-    Push,    // push keyword
-    Pop,     // pop keyword
-
-    // Module System
-    PubCrate, // pub(crate)
-    Private,  // private keyword
-
-    // IO Operations
-    Print,   // print keyword
-    Println, // println keyword
-    Input,   // input keyword
-
-    // File Operations
-    ReadFile,  // read_file keyword
-    WriteFile, // write_file keyword
-
-    // Type Conversion
-    ToString, // to_string keyword
-    ToInt,    // to_int keyword
-    ToFloat,  // to_float keyword
-    ToBool,   // to_bool keyword
-
-    // Collections
-    Vec,     // Vec keyword
-    HashMap, // HashMap keyword
+    // Operators and Delimiters
+    Plus,
+    PlusPlus,
+    PlusEq,
+    Minus,
+    MinusMinus,
+    MinusEq,
+    Multiply,
+    Divide,
+    Assign,
+    Eq,
+    NotEq,
+    Lt,
+    Gt,
+    LtEq,
+    GtEq,
+    And,
+    Or,
+    Not,
+    Modulus,
+    LParen,
+    RParen,
+    LBrace,
+    RBrace,
+    LBracket,
+    RBracket,
+    Comma,
+    Dot,
+    Colon,
+    DoubleColon,
+    Semicolon,
+    Arrow,
 
     // Special
     Identifier(String),
@@ -232,8 +209,8 @@ impl Lexer {
             "channel" => Token::Channel,
             "send" => Token::Send,
             "recv" => Token::Recv,
-            "push" => Token::Push,
-            "pop" => Token::Pop,
+            // "push" => Token::Push,
+            // "pop" => Token::Pop,
 
             // Collections
             "Vec" => Token::Vec,
