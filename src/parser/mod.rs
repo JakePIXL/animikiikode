@@ -235,8 +235,39 @@ impl Parser {
         }
     }
 
+    fn parse_ownership(&mut self) -> Result<Ownership, String> {
+        match self.peek() {
+            Some(Token::At) => {
+                self.advance();
+                Ok(Ownership::Shared)
+            }
+            Some(Token::Tilde) => {
+                self.advance();
+                Ok(Ownership::Unique)
+            }
+            _ => Ok(Ownership::Unique),
+        }
+    }
+
     fn parse_variable_declaration(&mut self) -> Result<AstNode, String> {
         self.advance(); // consume 'let'
+
+        let ownership = match self.peek() {
+            Some(Token::At) => {
+                self.advance(); // consume '@'
+                Some(Ownership::Shared)
+            }
+            Some(Token::Tilde) => {
+                self.advance(); // consume '~'
+                Some(Ownership::Unique)
+            }
+            Some(Token::WeakAttr) => {
+                self.advance(); // consume '#weak'
+                Some(Ownership::Shared)
+            }
+            _ => None,
+        };
+
         let name = match self.advance() {
             Some(Token::Identifier(name)) => name,
             _ => return Err("Expected identifier after 'let'".to_string()),
@@ -244,7 +275,28 @@ impl Parser {
 
         let type_annotation = if self.peek() == Some(&Token::Colon) {
             self.advance(); // consume ':'
-            Some(self.parse_type()?)
+
+            // Handle ownership in type position (e.g., let x: @Vec<i32>)
+            let type_ownership = match self.peek() {
+                Some(Token::At) => {
+                    self.advance();
+                    Some(Ownership::Shared)
+                }
+                Some(Token::Tilde) => {
+                    self.advance();
+                    Some(Ownership::Unique)
+                }
+                _ => None,
+            };
+
+            let base_type = self.parse_type()?;
+
+            // Combine ownership with type if present
+            Some(match type_ownership {
+                Some(Ownership::Shared) => Type::Shared(Box::new(base_type)),
+                Some(Ownership::Unique) => Type::Unique(Box::new(base_type)),
+                _ => base_type,
+            })
         } else {
             None
         };
@@ -263,7 +315,7 @@ impl Parser {
                     name,
                     type_annotation,
                     initializer,
-                    ownership: None,
+                    ownership,
                 })
             }
             other => Err(format!(
@@ -642,6 +694,16 @@ impl Parser {
                     }
                 }
                 Token::Vec | Token::HashMap => self.parse_collection_creation(),
+                Token::At => {
+                    self.advance(); // consume @
+                    match self.peek().cloned() {
+                        Some(Token::Identifier(name)) => {
+                            self.advance(); // consume identifier
+                            Ok(AstNode::Identifier(format!("@{}", name)))
+                        }
+                        _ => Err("Expected identifier after @".to_string()),
+                    }
+                }
                 Token::Identifier(name) => {
                     self.advance(); // consume identifier
                     if self.peek() == Some(&Token::LParen) || StdLib::is_builtin(&name) {

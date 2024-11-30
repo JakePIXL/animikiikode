@@ -2,7 +2,9 @@
 
 use crate::parser::{AstNode, Operator, Type, UnaryOperator};
 use crate::stdlib::StdLib;
+use std::cell::RefCell;
 use std::collections::HashMap;
+use std::rc::Rc;
 
 // Values that can exist during runtime
 #[derive(Debug, Clone, PartialEq)]
@@ -20,12 +22,13 @@ pub enum Value {
         body: Box<AstNode>,
         closure: Environment,
     },
+    SharedRef(Rc<RefCell<Value>>),
 }
 
 // Environment to store variables and their values
 #[derive(Debug, Clone, PartialEq)]
 pub struct Environment {
-    values: HashMap<String, Value>,
+    values: HashMap<String, Rc<RefCell<Value>>>,
     parent: Option<Box<Environment>>,
 }
 
@@ -45,12 +48,16 @@ impl Environment {
     }
 
     pub fn define(&mut self, name: String, value: Value) {
-        self.values.insert(name, value);
+        let wrapped = match value {
+            Value::SharedRef(r) => r,
+            v => Rc::new(RefCell::new(v)),
+        };
+        self.values.insert(name, wrapped);
     }
 
     pub fn get(&self, name: &str) -> Option<Value> {
         match self.values.get(name) {
-            Some(value) => Some(value.clone()),
+            Some(rc) => Some(Value::SharedRef(rc.clone())),
             None => self.parent.as_ref().and_then(|parent| parent.get(name)),
         }
     }
@@ -115,6 +122,32 @@ impl Interpreter {
                 let index_val = self.interpret(*index)?;
 
                 match (target_val, index_val) {
+                    (Value::SharedRef(rc), Value::Integer(i)) => {
+                        let value = rc.borrow();
+                        if let Value::Vector(vec) = &*value {
+                            if i < 0 || i as usize >= vec.len() {
+                                return Err("Index out of bounds".to_string());
+                            }
+                            Ok(vec[i as usize].clone())
+                        } else {
+                            Err("Cannot index non-vector value".to_string())
+                        }
+                    }
+                    (Value::SharedRef(rc), key) => {
+                        let value = rc.borrow();
+                        if let Value::HashMap(map) = &*value {
+                            if let Value::String(key) = key {
+                                match map.get(&key) {
+                                    Some(value) => Ok(value.clone()),
+                                    None => Err(format!("Key not found: {}", key)),
+                                }
+                            } else {
+                                Err("Key must be a string".to_string())
+                            }
+                        } else {
+                            Err("Cannot index non-hashmap value".to_string())
+                        }
+                    }
                     (Value::Vector(vec), Value::Integer(i)) => {
                         if i < 0 || i as usize >= vec.len() {
                             return Err("Index out of bounds".to_string());
@@ -135,10 +168,18 @@ impl Interpreter {
                 }
             }
 
-            AstNode::Identifier(name) => self
-                .environment
-                .get(&name)
-                .ok_or(format!("Undefined variable: {}", name)),
+            AstNode::Identifier(name) => {
+                if name.starts_with('@') {
+                    let real_name = &name[1..];
+                    self.environment
+                        .get(real_name)
+                        .ok_or(format!("Undefined variable: {}", real_name))
+                } else {
+                    self.environment
+                        .get(&name)
+                        .ok_or(format!("Undefined variable: {}", name))
+                }
+            }
 
             AstNode::BinaryOp {
                 left,

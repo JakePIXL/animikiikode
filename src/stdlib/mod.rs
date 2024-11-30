@@ -541,6 +541,19 @@ impl StdLib {
         }
 
         match &args[0] {
+            Value::SharedRef(rc) => {
+                let mut value = rc.borrow_mut();
+                if let Value::Vector(vec) = &mut *value {
+                    let index = match &args[1] {
+                        Value::Integer(i) => *i as usize,
+                        _ => return Err("Index must be an integer".to_string()),
+                    };
+                    vec[index] = args[2].clone();
+                    Ok(Value::Unit)
+                } else {
+                    Err("First argument must be a vector".to_string())
+                }
+            }
             Value::Vector(vec) => {
                 let mut new_vec = vec.clone();
                 let index = match &args[1] {
@@ -560,6 +573,15 @@ impl StdLib {
         }
 
         match &args[0] {
+            Value::SharedRef(rc) => {
+                let mut value = rc.borrow_mut();
+                if let Value::Vector(vec) = &mut *value {
+                    vec.push(args[1].clone());
+                    Ok(Value::Unit)
+                } else {
+                    Err("First argument must be a vector".to_string())
+                }
+            }
             Value::Vector(vec) => {
                 let mut new_vec = vec.clone();
                 new_vec.push(args[1].clone());
@@ -575,6 +597,14 @@ impl StdLib {
         }
 
         match &args[0] {
+            Value::SharedRef(rc) => {
+                let mut value = rc.borrow_mut();
+                if let Value::Vector(vec) = &mut *value {
+                    vec.pop().ok_or("Vector is empty".to_string())
+                } else {
+                    Err("Argument must be a vector".to_string())
+                }
+            }
             Value::Vector(vec) => {
                 let mut new_vec = vec.clone();
                 new_vec.pop().ok_or("Vector is empty".to_string())
@@ -593,6 +623,19 @@ impl StdLib {
         }
 
         match &args[0] {
+            Value::SharedRef(rc) => {
+                let mut value = rc.borrow_mut();
+                if let Value::HashMap(map) = &mut *value {
+                    let key = match &args[1] {
+                        Value::String(s) => s.clone(),
+                        _ => return Err("Key must be a string".to_string()),
+                    };
+                    map.insert(key, args[2].clone());
+                    Ok(Value::Unit)
+                } else {
+                    Err("First argument must be a hashmap".to_string())
+                }
+            }
             Value::HashMap(map) => {
                 let mut new_map = map.clone();
                 let key = match &args[1] {
@@ -612,6 +655,21 @@ impl StdLib {
         }
 
         match &args[0] {
+            Value::SharedRef(rc) => {
+                let value = rc.borrow();
+                match &*value {
+                    Value::HashMap(map) => {
+                        let key = match &args[1] {
+                            Value::String(s) => s,
+                            _ => return Err("Key must be a string".to_string()),
+                        };
+                        map.get(key)
+                            .cloned()
+                            .ok_or("Key not found in hashmap".to_string())
+                    }
+                    _ => Err("First argument must be a hashmap".to_string()),
+                }
+            }
             Value::HashMap(map) => {
                 let key = match &args[1] {
                     Value::String(s) => s,
