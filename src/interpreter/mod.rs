@@ -1,6 +1,7 @@
-// src/interpreter/mod.rs
+#![allow(dead_code)]
 
 use crate::parser::{AstNode, Operator, Type, UnaryOperator};
+use crate::stdlib::StdLib;
 use std::collections::HashMap;
 
 // Values that can exist during runtime
@@ -10,6 +11,8 @@ pub enum Value {
     Float(f64),
     String(String),
     Boolean(bool),
+    Vector(Vec<Value>),
+    HashMap(HashMap<String, Value>),
     Unit,             // For functions that don't return a value
     Reference(usize), // For heap allocated values
     Function {
@@ -107,6 +110,31 @@ impl Interpreter {
                 Ok(value)
             }
 
+            AstNode::IndexAccess { target, index } => {
+                let target_val = self.interpret(*target)?;
+                let index_val = self.interpret(*index)?;
+
+                match (target_val, index_val) {
+                    (Value::Vector(vec), Value::Integer(i)) => {
+                        if i < 0 || i as usize >= vec.len() {
+                            return Err("Index out of bounds".to_string());
+                        }
+                        Ok(vec[i as usize].clone())
+                    }
+                    (Value::HashMap(map), key) => {
+                        if let Value::String(key) = key {
+                            match map.get(&key) {
+                                Some(value) => Ok(value.clone()),
+                                None => Err(format!("Key not found: {}", key)),
+                            }
+                        } else {
+                            Err("Key must be a string".to_string())
+                        }
+                    }
+                    _ => Err("Invalid index access".to_string()),
+                }
+            }
+
             AstNode::Identifier(name) => self
                 .environment
                 .get(&name)
@@ -120,6 +148,119 @@ impl Interpreter {
                 let left_val = self.interpret(*left)?;
                 let right_val = self.interpret(*right)?;
                 self.evaluate_binary_op(operator, left_val, right_val)
+            }
+
+            AstNode::CompoundAssign {
+                operator,
+                target,
+                value,
+            } => match operator {
+                Operator::Assign => {
+                    if let AstNode::Identifier(name) = *target {
+                        let new_val = self.interpret(*value)?;
+                        self.environment.define(name, new_val.clone());
+                        Ok(new_val)
+                    } else {
+                        Err("Left side of = must be a variable".to_string())
+                    }
+                }
+                Operator::SelfAdd => {
+                    if let AstNode::Identifier(name) = *target {
+                        let curr_val = self
+                            .environment
+                            .get(&name)
+                            .ok_or(format!("Undefined variable: {}", name))?;
+                        let new_val = self.interpret(*value)?;
+                        let result =
+                            self.evaluate_binary_op(Operator::Add, curr_val.clone(), new_val)?;
+                        self.environment.define(name, result.clone());
+                        Ok(result)
+                    } else {
+                        Err("Left side of += must be a variable".to_string())
+                    }
+                }
+                Operator::Inc => {
+                    if let AstNode::Identifier(name) = *target {
+                        let curr_val = self
+                            .environment
+                            .get(&name)
+                            .ok_or(format!("Undefined variable: {}", name))?;
+                        let new_val = Value::Integer(1);
+                        let result =
+                            self.evaluate_binary_op(Operator::Add, curr_val.clone(), new_val)?;
+                        self.environment.define(name, result.clone());
+                        Ok(result)
+                    } else {
+                        Err("Left side of ++ must be a variable".to_string())
+                    }
+                }
+                Operator::SelfSub => {
+                    if let AstNode::Identifier(name) = *target {
+                        let curr_val = self
+                            .environment
+                            .get(&name)
+                            .ok_or(format!("Undefined variable: {}", name))?;
+                        let new_val = self.interpret(*value)?;
+                        let result =
+                            self.evaluate_binary_op(Operator::Sub, curr_val.clone(), new_val)?;
+                        self.environment.define(name, result.clone());
+                        Ok(result)
+                    } else {
+                        Err("Left side of -= must be a variable".to_string())
+                    }
+                }
+                Operator::Dec => {
+                    if let AstNode::Identifier(name) = *target {
+                        let curr_val = self
+                            .environment
+                            .get(&name)
+                            .ok_or(format!("Undefined variable: {}", name))?;
+                        let new_val = Value::Integer(1);
+                        let result =
+                            self.evaluate_binary_op(Operator::Sub, curr_val.clone(), new_val)?;
+                        self.environment.define(name, result.clone());
+                        Ok(result)
+                    } else {
+                        Err("Left side of -- must be a variable".to_string())
+                    }
+                }
+                _ => Err("Invalid compound assignment operator".to_string()),
+            },
+
+            AstNode::UnaryOp {
+                operator: UnaryOperator::Inc,
+                operand,
+            } => {
+                if let AstNode::Identifier(name) = *operand {
+                    let curr_val = self
+                        .environment
+                        .get(&name)
+                        .ok_or(format!("Undefined variable: {}", name))?;
+                    let one = Value::Integer(1);
+                    let result = self.evaluate_binary_op(Operator::Add, curr_val.clone(), one)?;
+                    self.environment.define(name, result.clone());
+                    Ok(result)
+                } else {
+                    Err("Operand of ++ must be a variable".to_string())
+                }
+            }
+
+            AstNode::UnaryOp {
+                operator: UnaryOperator::Dec,
+                operand,
+            } => {
+                if let AstNode::Identifier(name) = *operand {
+                    let curr_val = self
+                        .environment
+                        .get(&name)
+                        .ok_or(format!("Undefined variable: {}", name))?;
+                    let one = Value::Integer(1);
+                    let result = self.evaluate_binary_op(Operator::Sub, curr_val.clone(), one)?;
+                    self.environment.define(name, result.clone());
+                    Ok(result)
+                } else {
+                    Err("Operand of -- must be a variable".to_string())
+                }
             }
 
             AstNode::UnaryOp { operator, operand } => {
@@ -176,18 +317,76 @@ impl Interpreter {
                     body: body.clone(),
                     closure: self.environment.clone(),
                 };
-                self.environment.define(name, func_value.clone());
+                self.environment.define(name.clone(), func_value.clone());
+
+                if name == "main" {
+                    return self.call_user_function(
+                        vec![],
+                        *body,
+                        vec![],
+                        self.environment.clone(),
+                    );
+                }
+
                 Ok(func_value)
             }
 
+            AstNode::FunctionCall { name, args } => {
+                let evaluated_args = args
+                    .into_iter()
+                    .map(|arg| self.interpret(arg))
+                    .collect::<Result<Vec<_>, _>>()?;
+
+                if let Some(func) = self.environment.get(&name) {
+                    match func {
+                        Value::Function {
+                            params,
+                            body,
+                            closure,
+                        } => self.call_user_function(params, *body, evaluated_args, closure),
+                        _ => StdLib::handle_builtin_function(&name, evaluated_args),
+                    }
+                } else {
+                    StdLib::handle_builtin_function(&name, evaluated_args)
+                }
+            }
+
             // Handle unique ownership (~)
-            AstNode::Ownership(ownership) => {
+            AstNode::Ownership(_ownership) => {
                 // Implementation for ownership handling
                 Ok(Value::Unit)
             }
 
             _ => Err(format!("Unimplemented node type: {:?}", node)),
         }
+    }
+
+    fn call_user_function(
+        &mut self,
+        params: Vec<(String, Type)>,
+        body: AstNode,
+        args: Vec<Value>,
+        closure: Environment,
+    ) -> Result<Value, String> {
+        if args.len() != params.len() {
+            return Err(format!(
+                "Function expected {} arguments but got {}",
+                params.len(),
+                args.len()
+            ));
+        }
+
+        let mut func_env = Environment::with_parent(closure);
+
+        for ((name, _type), value) in params.into_iter().zip(args) {
+            func_env.define(name, value);
+        }
+
+        let previous_env = std::mem::replace(&mut self.environment, func_env);
+        let result = self.interpret(body);
+        self.environment = previous_env;
+
+        result
     }
 
     fn evaluate_binary_op(
@@ -207,10 +406,22 @@ impl Interpreter {
                     Ok(Value::Integer(a / b))
                 }
             }
+            (Operator::Mod, Value::Integer(a), Value::Integer(b)) => {
+                if b == 0 {
+                    Err("Modulus by zero".to_string())
+                } else {
+                    Ok(Value::Integer(a % b))
+                }
+            }
             (Operator::Eq, Value::Integer(a), Value::Integer(b)) => Ok(Value::Boolean(a == b)),
             (Operator::NotEq, Value::Integer(a), Value::Integer(b)) => Ok(Value::Boolean(a != b)),
-            // Add more cases for other types and operators
-            _ => Err(format!("Invalid operator for types")),
+            (Operator::Lt, Value::Integer(a), Value::Integer(b)) => Ok(Value::Boolean(a < b)),
+            (Operator::Gt, Value::Integer(a), Value::Integer(b)) => Ok(Value::Boolean(a > b)),
+            (Operator::LtEq, Value::Integer(a), Value::Integer(b)) => Ok(Value::Boolean(a <= b)),
+            (Operator::GtEq, Value::Integer(a), Value::Integer(b)) => Ok(Value::Boolean(a >= b)),
+            (Operator::And, Value::Boolean(a), Value::Boolean(b)) => Ok(Value::Boolean(a && b)),
+            (Operator::Or, Value::Boolean(a), Value::Boolean(b)) => Ok(Value::Boolean(a || b)),
+            _ => Err("Invalid operator for types".to_string()),
         }
     }
 
@@ -222,7 +433,7 @@ impl Interpreter {
         match (operator, operand) {
             (UnaryOperator::Neg, Value::Integer(n)) => Ok(Value::Integer(-n)),
             (UnaryOperator::Not, Value::Boolean(b)) => Ok(Value::Boolean(!b)),
-            _ => Err(format!("Invalid unary operator for type")),
+            _ => Err("Invalid unary operator for type".to_string()),
         }
     }
 }

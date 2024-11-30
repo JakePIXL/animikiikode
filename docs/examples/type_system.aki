@@ -11,6 +11,6 @@ func type_examples() {
     let sum = x + number; // Results in i32
 
     // Collection with generic type
-    let numbers: Vec<i32> = [1, 2, 3, 4, 5];
-    push(numbers, 6);
+    let @numbers: Vec<i32> = [1, 2, 3, 4, 5];
+    push(@numbers, 6);
 }

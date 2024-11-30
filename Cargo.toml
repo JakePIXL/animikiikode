@@ -1,6 +1,6 @@
 [package]
 name = "animikiikode"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 authors = ["Jake \"PIXL\" Evans <jake@valink.io>"]
 description = "An interpreted programming language with static typing and dynamic capabilities"
@@ -15,6 +15,7 @@ thiserror = "2.0.3"
 tokio = { version = "1.41.1", features = ["full"] }
 log = "0.4.22"
 env_logger = "0.11.5"
+rand = "0.8.5"
 
 [dev-dependencies]
 pretty_assertions = "1.4.1"

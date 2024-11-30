@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 #[derive(Debug, PartialEq, Clone)]
 pub enum Token {
     // Literals
@@ -5,6 +7,15 @@ pub enum Token {
     Float(f64),
     String(String),
     Bool(bool),
+
+    // Collections
+    Channel,
+    Send,
+    Recv,
+    Push,
+    Pop,
+    Vec,
+    HashMap,
 
     // Keywords
     Let,
@@ -50,69 +61,42 @@ pub enum Token {
     TypeVec,
     TypeHashMap,
 
-    // Operators
-    Plus,     // +
-    Minus,    // -
-    Multiply, // *
-    Divide,   // /
-    Assign,   // =
-    Eq,       // ==
-    NotEq,    // !=
-    Lt,       //
-    Gt,       // >
-    LtEq,     // <=
-    GtEq,     // >=
-    And,      // &&
-    Or,       // ||
-    Not,      // !
-
-    // Delimiters
-    LParen,      // (
-    RParen,      // )
-    LBrace,      // {
-    RBrace,      // }
-    LBracket,    // [
-    RBracket,    // ]
-    Comma,       // ,
-    Dot,         // .
-    Colon,       // :
-    DoubleColon, // ::
-    Semicolon,   // ;
-    Arrow,       // ->
-
-    // Concurrency
-    Channel, // channel keyword
-    Send,    // send keyword
-    Recv,    // recv keyword
-    Push,    // push keyword
-    Pop,     // pop keyword
-
-    // Module System
-    PubCrate, // pub(crate)
-    Private,  // private keyword
-
-    // IO Operations
-    Print,   // print keyword
-    Println, // println keyword
-    Input,   // input keyword
-
-    // File Operations
-    ReadFile,  // read_file keyword
-    WriteFile, // write_file keyword
-
-    // Type Conversion
-    ToString, // to_string keyword
-    ToInt,    // to_int keyword
-    ToFloat,  // to_float keyword
-    ToBool,   // to_bool keyword
-
-    // Collections
-    Vec,     // Vec keyword
-    HashMap, // HashMap keyword
+    // Operators and Delimiters
+    Plus,
+    PlusPlus,
+    PlusEq,
+    Minus,
+    MinusMinus,
+    MinusEq,
+    Multiply,
+    Divide,
+    Assign,
+    Eq,
+    NotEq,
+    Lt,
+    Gt,
+    LtEq,
+    GtEq,
+    And,
+    Or,
+    Not,
+    Modulus,
+    LParen,
+    RParen,
+    LBrace,
+    RBrace,
+    LBracket,
+    RBracket,
+    Comma,
+    Dot,
+    Colon,
+    DoubleColon,
+    Semicolon,
+    Arrow,
 
     // Special
     Identifier(String),
-    EOF,
+    Eof,
     Invalid(char),
 }
 
@@ -125,7 +109,7 @@ pub struct Lexer {
 impl Lexer {
     pub fn new(input: String) -> Self {
         let chars: Vec<char> = input.chars().collect();
-        let current_char = chars.get(0).cloned();
+        let current_char = chars.first().cloned();
 
         Lexer {
             input: chars,
@@ -157,7 +141,7 @@ impl Lexer {
         let mut is_float = false;
 
         while let Some(c) = self.current_char {
-            if c.is_digit(10) {
+            if c.is_ascii_digit() {
                 number.push(c);
                 self.advance();
             } else if c == '.' && !is_float {
@@ -225,21 +209,8 @@ impl Lexer {
             "channel" => Token::Channel,
             "send" => Token::Send,
             "recv" => Token::Recv,
-            "push" => Token::Push,
-            "pop" => Token::Pop,
-
-            // IO
-            "print" => Token::Print,
-            "println" => Token::Println,
-            "input" => Token::Input,
-            "read_file" => Token::ReadFile,
-            "write_file" => Token::WriteFile,
-
-            // Type Conversion
-            "to_string" => Token::ToString,
-            "to_int" => Token::ToInt,
-            "to_float" => Token::ToFloat,
-            "to_bool" => Token::ToBool,
+            // "push" => Token::Push,
+            // "pop" => Token::Pop,
 
             // Collections
             "Vec" => Token::Vec,
@@ -309,10 +280,10 @@ impl Lexer {
         self.skip_whitespace();
 
         match self.current_char {
-            None => Token::EOF,
+            None => Token::Eof,
             Some(c) => {
                 if self.position > self.input.len() * 2 {
-                    return Token::EOF;
+                    return Token::Eof;
                 }
 
                 match c {
@@ -330,13 +301,27 @@ impl Lexer {
                     }
                     '+' => {
                         self.advance();
-                        Token::Plus
+                        if self.current_char == Some('=') {
+                            self.advance();
+                            Token::PlusEq
+                        } else if self.current_char == Some('+') {
+                            self.advance();
+                            Token::PlusPlus
+                        } else {
+                            Token::Plus
+                        }
                     }
                     '-' => {
                         self.advance();
                         if self.current_char == Some('>') {
                             self.advance();
                             Token::Arrow
+                        } else if self.current_char == Some('=') {
+                            self.advance();
+                            Token::MinusEq
+                        } else if self.current_char == Some('-') {
+                            self.advance();
+                            Token::MinusMinus
                         } else {
                             Token::Minus
                         }
@@ -448,6 +433,10 @@ impl Lexer {
                         self.advance();
                         Token::Semicolon
                     }
+                    '%' => {
+                        self.advance();
+                        Token::Modulus
+                    }
                     _ => {
                         let invalid = c;
                         self.advance();
@@ -474,7 +463,7 @@ mod tests {
         assert_eq!(lexer.next_token(), Token::Assign);
         assert_eq!(lexer.next_token(), Token::Integer(42));
         assert_eq!(lexer.next_token(), Token::Semicolon);
-        assert_eq!(lexer.next_token(), Token::EOF);
+        assert_eq!(lexer.next_token(), Token::Eof);
     }
 
     #[test]
